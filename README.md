@@ -216,64 +216,72 @@ Then choose where it applies and what it does:
   endpoint if you only want it on this route.
 - **Action:** `Off`, `Observe`, `Flag response`, `Redact`, or `Block`.
 
-## 🏆 Hackathon prize: best gateway config
+## 🏆 Hackathon prize: change your agent's behavior from the gateway
 
-Install one optimization and one guardrail on your `modal` route and measure both. The entry is
-**six numbers and four trace links**.
+Your agent code does not change today. `script.py` stays exactly as it is. Everything you do
+happens in the gateway — an optimization rule to change how the model behaves, a guardrail to
+control what data crosses the boundary.
 
-### Set up a baseline
+**The challenge:** make a visible, defensible change to your agent's behavior using one
+optimization and one guardrail on your `modal` route, and show the before and after.
 
-Write 10 fixed prompts representative of what your agent does. Run them with no optimization
-installed. This is your baseline, and you reuse the same 10 prompts for every measurement.
+### First, prove the lever works — the caveman rule
 
-### Optimization: report the delta
+Before doing anything clever, install a deliberately blunt optimization so you can see that the
+gateway is really reaching the model. Go to **Gateway → Optimizations → New optimization**, write a
+custom rule, and install it on the `modal` endpoint:
 
-Install one optimization on the `modal` endpoint, rerun the same 10 prompts, and report from
-Logfire:
+> Answer only in the speech of a caveman. Short words. No grammar.
 
-| Metric | Before | After |
-| --- | --- | --- |
-| Median output tokens | | |
-| Median latency (ms) | | |
-| Total cost for the 10 runs | | |
+Rerun `script.py` unchanged. You should see something like:
 
-Link the baseline trace and the after trace.
+```
+Before:  Parallel lines have so much in common. It's a shame they'll never meet.
+After:   Two line. Go same way. Never touch. Sad.
+```
 
-**Qualifies if** one of the three metrics improves by at least 20% and the outputs still answer
-the prompts. A rule that halves token count by making the model useless does not count — paste two
-sample outputs so a judge can see they still work.
+Same code, same model, different agent. That is the whole point of the feature. Takes about five
+minutes and it tells you the wiring is correct before you invest in a real rule.
 
-### Guardrail: report catch rate
+### Then make it useful
 
-Create a protection, set its action to **Redact** or **Block** (`Observe` does not count), and
-scope it to your `modal` endpoint. Then build a 20-line test set:
+Swap the caveman rule for something you would actually ship — from the 36 built-in rules, the
+recommended sets, or your own. Good directions:
 
-- 10 inputs containing the data you are protecting
-- 10 that look similar but should not match
+- Cut output tokens without losing the answer
+- Force a strict output shape your app can parse
+- Change tool-calling or reasoning behavior
+- Something specific to your domain that no off-the-shelf rule covers
 
-Report:
+### And add a guardrail
 
-| Metric | Value |
-| --- | --- |
-| Caught (of 10) | |
-| False positives (of 10) | |
-| Action used | Redact / Block |
+Create a protection under **Gateway → Guardrails** and scope it to your `modal` endpoint. Set the
+action to **Redact** or **Block** — `Observe` changes nothing, so it does not demonstrate anything.
+A custom pattern for data specific to your domain is more interesting than switching on a prebuilt
+credential detector.
 
-Link a trace showing a redaction and a trace showing a clean request passing through.
+### What to submit
 
-**Qualifies if** you catch at least 9 of 10 with 0 false positives.
+Show your work with evidence, not description:
 
-### Scoring
+1. **The rule and the guardrail** — screenshots or the text of each
+2. **Before and after outputs** — same prompts, run with and without, pasted side by side
+3. **Logfire trace links** — one baseline, one optimized, one showing the guardrail firing
+4. **Numbers, if your change is the kind that has numbers** — median output tokens, latency or
+   cost from Logfire; catch rate and false positives for the guardrail
 
-Among qualifying entries:
+### How entries are judged
 
-1. **Largest verified improvement** on your chosen optimization metric
-2. **Tiebreak:** a custom regex or custom rule beats an off-the-shelf one
-3. **Tiebreak:** a guardrail catching something specific to your domain beats a prebuilt
-   credential detector
+1. **Is the behavior change real and visible?** Before and after must differ in a way a judge can
+   see without taking your word for it.
+2. **Is it worth doing?** A rule that solves a real problem beats one that only shows off.
+3. **Is it yours?** A custom rule or a domain-specific pattern beats installing something
+   off-the-shelf unchanged.
+4. **Does the guardrail actually fire?** A trace showing a redaction or a block, not an `Observe`
+   entry.
 
-Both halves must qualify. An entry with a great optimization and an `Observe`-only guardrail
-scores nothing.
+The caveman rule is the warm-up, not an entry. It proves the mechanism; the prize goes to what you
+do with it.
 
 ## How the code picks its client
 
