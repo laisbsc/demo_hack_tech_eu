@@ -225,23 +225,63 @@ control what data crosses the boundary.
 **The challenge:** make a visible, defensible change to your agent's behavior using one
 optimization and one guardrail on your `modal` route, and show the before and after.
 
-### First, prove the lever works — the caveman rule
+### First, prove the lever works — Caveman mode
 
-Before doing anything clever, install a deliberately blunt optimization so you can see that the
-gateway is really reaching the model. Go to **Gateway → Optimizations → New optimization**, write a
-custom rule, and install it on the `modal` endpoint:
+Before doing anything clever, install a built-in rule so you can see the gateway really reaching
+the model. Go to **Gateway → Optimizations**, find **Caveman mode (terse)** in the recommended
+catalog, and install it.
 
-> Answer only in the speech of a caveman. Short words. No grammar.
-
-Rerun `script.py` unchanged. You should see something like:
+It is a `Style` rule with action `Transform`. Its injected instruction is fixed — built-in rules
+cannot be edited, only targeted, enabled, disabled or deleted:
 
 ```
-Before:  Parallel lines have so much in common. It's a shame they'll never meet.
-After:   Two line. Go same way. Never touch. Sad.
+STYLE: Output is terse. Drop articles, filler, and hedging. Preserve technical precision.
+Short sentences. No restating the question.
 ```
 
-Same code, same model, different agent. That is the whole point of the feature. Takes about five
-minutes and it tells you the wiring is correct before you invest in a real rule.
+Under **Targeting**, add a binding to route `modal` (whole route). The rule page shows a **Usage**
+chart of requests it ran on and requests it changed — that is your confirmation it fired.
+
+Now set the prompt in `script.py` to something that normally gets a long answer:
+
+```python
+result = agent.run_sync('Explain how HTTPS certificate validation works.')
+```
+
+Run it with the rule disabled, then enabled. Same code, same model, same prompt:
+
+**Disabled** — 596 words, opening with an intro, four `###` sections, and a summary table:
+
+```
+To understand HTTPS certificate validation, you first have to understand the goal: **Trust.**
+
+When your browser connects to `https://google.com`, it needs to know that it is actually
+talking to Google's servers and not a hacker sitting in the middle...
+
+### 1. The Foundation: The Trust Store
+...
+```
+
+**Enabled** — 162 words, straight into a numbered list, no preamble:
+
+```
+1. **TCP Handshake**: Client establishes connection to server.
+2. **Server Hello**: Server sends SSL/TLS certificate containing its public key.
+3. **Chain Verification**: Client checks certificate issuer. It follows a chain of trust from
+   the server certificate to intermediate certificates, ending at a pre-installed **Root
+   Certificate Authority (CA)** in the browser/OS trust store.
+...
+```
+
+**73% fewer words, and no technical content lost** — the chain of trust, hostname matching,
+expiry, CRL/OCSP revocation and key exchange all survive. That is the rule doing exactly what it
+says: drop articles, filler and hedging, preserve technical precision.
+
+Note what it is *not*. The name is a joke about dropped articles, not a request for caveman
+diction — the model keeps its technical register because the instruction explicitly tells it to.
+Read the injected instruction, not the rule name, when predicting what a rule will do.
+
+Five minutes, and you now know the wiring is correct before investing in a real rule.
 
 ### Then make it useful
 
