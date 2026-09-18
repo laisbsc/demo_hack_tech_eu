@@ -1,0 +1,10 @@
+[project]
+name = "demo-hack-tech-eu"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "logfire>=5.1.0",
+    "pydantic-ai>=2.45.0",
+]
