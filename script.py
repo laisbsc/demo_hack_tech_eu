@@ -21,7 +21,10 @@ provider = gateway_provider('openai-chat', route='modal')
 model = OpenAIChatModel('google/gemma-4-31B-it', provider=provider)
 agent = Agent(model)
 
-result = agent.run_sync('Explain how HTTPS certificate validation works.')
+result = agent.run_sync(
+    'Write a professional email declining a meeting invitation for a sprint planning '
+    'with the design team. Sign off with my direct line, 07700 900123.'
+)
 
 logfire.span(f'Here is the output in a logfire span: {result.output}')
-print(f'Here is the output: {result.output=}')
+print(result.output)

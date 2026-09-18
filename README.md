@@ -295,10 +295,65 @@ recommended sets, or your own. Good directions:
 
 ### And add a guardrail
 
-Create a protection under **Gateway → Guardrails** and scope it to your `modal` endpoint. Set the
-action to **Redact** or **Block** — `Observe` changes nothing, so it does not demonstrate anything.
+Guardrails detect and anonymize information **before it reaches the model**. Create a protection
+under **Gateway → Guardrails**, scope it to your `modal` endpoint, and set the action to **Redact**
+or **Block** — `Observe` only records, so it demonstrates nothing.
+
 A custom pattern for data specific to your domain is more interesting than switching on a prebuilt
-credential detector.
+credential detector. Worked example: employee phone numbers should never reach the model when it
+drafts an email.
+
+**Gateway → Guardrails → New protection → Custom pattern.** Name it `UK phone number` and paste:
+
+```regex
+(?:\+44[\s.-]?\(?0\)?|\+44|0)[\s.-]?\d{2,4}[\s.-]?\d{3,4}[\s.-]?\d{3,4}
+```
+
+No lookarounds, so it stays portable across regex engines. It covers mobile, London, regional,
+freephone and international forms, with space, dot or hyphen separators.
+
+Use **Pattern tests** before saving — the samples are stored with the protection, and a regex that
+misses is indistinguishable from a guardrail that never fired. These ten should all match:
+
+```
+Call me on 07911 123456          Office line 020 7946 0958
+Mobile: 07911123456              +44 20 7946 0958 ext 12
+Reach me at +44 7911 123456      Manchester office: 0161 496 0000
++447911123456 is my cell         tel: +44 (0)7911 123456
+Direct dial 0131-496-0123        0800 001 0000 for support
+```
+
+And these ten should not — near-misses are what separate a useful protection from a noisy one:
+
+```
+The meeting is on 2026-09-18     We shipped 45 tickets
+Invoice total 1234.56            Room 401, Building 3
+Sprint 4 planning at 10:30       Budget is 25000 GBP
+Version 2.1.4 shipped            Ref ABC-123-XY
+sarah@design.co.uk               Q3 2026 roadmap
+```
+
+Then set **Apply to** your `modal` endpoint and **Action** to `Redact`.
+
+To see it fire, put a number in the prompt:
+
+```python
+result = agent.run_sync(
+    'Write a professional email declining a meeting invitation for a sprint planning '
+    'with the design team. Sign off with my direct line, 07700 900123.'
+)
+```
+
+`07700 900123` is inside the range Ofcom reserves for drama and documentation, so it is never a
+real subscriber — use that range in anything you publish.
+
+With the protection redacting, the model never receives the digits, so it cannot put them in the
+email. That is the difference between a guardrail and a prompt instruction: the model is not asked
+to behave, it is never given the data.
+
+> **Watch the direction.** A redaction protection cleans the **request**. If you want to stop the
+> model *emitting* data in its reply, that is the response side — `Flag response` is a separate
+> action for a reason.
 
 ### What to submit
 
