@@ -151,25 +151,28 @@ Best regards,
 
 The Logfire URL printed at startup shows the trace.
 
-## 7. Gateway Optimizations
+## 7. Gateway Optimizations and Guardrails
 
-Optimizations live in the gateway rather than in your code. They inject directives into outbound
-requests, so they shape how the model behaves on every call through a route without you touching
-`script.py`.
+Two different levers, both in the gateway rather than in your code:
 
-The feature is behind a flag. Add this to the end of your Logfire project URL:
+- **Optimizations** inject directives into outbound requests, so they shape how the model behaves
+  on every call through a route without you touching `script.py`.
+- **Guardrails** detect secrets and personal data in requests and let you observe, flag, redact or
+  block — they control what data crosses the boundary.
+
+Both are behind flags. Add this to the end of your Logfire project URL:
 
 ```
-#enableFlags=gateway_optimizations
+#enableFlags=gateway_optimizations,gateway_guardrails_beta
 ```
 
 So `https://logfire-eu.pydantic.dev/<org>/<project>` becomes:
 
 ```
-https://logfire-eu.pydantic.dev/<org>/<project>#enableFlags=gateway_optimizations
+https://logfire-eu.pydantic.dev/<org>/<project>#enableFlags=gateway_optimizations,gateway_guardrails_beta
 ```
 
-That turns on the **Optimizations** tab under **Gateway**.
+That turns on the **Optimizations** and **Guardrails** tabs under **Gateway**.
 
 ### Installing an optimization
 
@@ -190,13 +193,54 @@ rule grounded in one vendor's quirks may not transfer, though — "Let reasoning
 internally" is about the o-series, "Use extended thinking" is about Claude's thinking blocks.
 Whether they help an open-weight model is an empirical question.
 
+### Adding a guardrail
+
+Go to **Gateway → Guardrails**. Guardrails detect and anonymize information before it reaches a
+model. The tab has two views: **Protections** (the rules) and **Connections** (external engines).
+
+Eleven prebuilt protections ship enabled, covering common credentials:
+
+| | |
+| --- | --- |
+| Anthropic API keys | OpenAI API keys |
+| AWS access key IDs | Prefect Cloud API keys |
+| GitHub personal access tokens | Slack tokens |
+| GitLab personal access tokens | SSH / PEM private keys |
+| Google API keys | Stripe live keys |
+| JSON Web Tokens | |
+
+**They all default to `Observe` on all requests** — they detect and record, but change nothing.
+That matters for the bonus: an untouched protection produces a trace entry, not a redaction.
+
+**New protection** starts from one of three:
+
+- **Prebuilt protection** — curated templates for secrets, personal data, financial data, network
+  identifiers
+- **Custom pattern** — your own regex; each protection matches one pattern
+- **Presidio protection** — your own Presidio service for detecting and redacting personal data
+
+A custom pattern takes a name, an optional description, and the regex, with live syntax
+validation. **Pattern tests** let you run sample messages against the pattern before saving, and
+the samples are stored with the protection — worth using, since a regex that misses is
+indistinguishable from a guardrail that never fired.
+
+<!-- TODO: screenshot of the New protection form -->
+
+Then choose where it applies and what it does:
+
+- **Apply to:** all endpoints, or specific endpoints with a per-endpoint action. Pick your `modal`
+  endpoint if you only want it on this route.
+- **Action:** `Off`, `Observe`, `Flag response`, `Redact`, or `Block`.
+
 ## 🏆 Hackathon prize: change your agent's behavior from the gateway
 
 Your agent code does not change today. `script.py` stays exactly as it is. Everything you do
-happens in the gateway — an optimization rule that changes how the model behaves.
+happens in the gateway — an optimization rule that changes how the model behaves, and optionally a
+guardrail that changes what it is allowed to see.
 
 **The challenge:** make a visible, defensible change to your agent's behavior using an
-optimization on your `modal` route, and show the before and after.
+optimization on your `modal` route, and show the before and after. **The bonus:** add a guardrail
+that stops data reaching the model at all.
 
 ### First, prove the lever works — Caveman mode
 
@@ -266,6 +310,98 @@ recommended sets, or your own. Good directions:
 - Change tool-calling or reasoning behavior
 - Something specific to your domain that no off-the-shelf rule covers
 
+### Bonus: stop data at the boundary with a guardrail
+
+An optimization changes how the model answers. A guardrail changes what the model is allowed to
+see. It inspects the request before it leaves the gateway, so a redacted value never reaches the
+model at all — a different guarantee from asking a model nicely not to repeat something.
+
+Create a protection under **Gateway → Guardrails**, scope it to your `modal` endpoint, and set the
+action to **Redact** or **Block**. `Observe` only records, so it demonstrates nothing.
+
+A custom pattern for data specific to your domain is more interesting than switching on a prebuilt
+credential detector. Worked example: employee phone numbers should never reach the model when it
+drafts an email.
+
+**Gateway → Guardrails → New protection → Custom pattern.** Name it `UK phone number` and paste:
+
+```regex
+(?:\+44[\s.-]?\(?0\)?|\+44|0)[\s.-]?\d{2,4}[\s.-]?\d{3,4}[\s.-]?\d{3,4}
+```
+
+No lookarounds, so it stays portable across regex engines. It covers mobile, London, regional,
+freephone and international forms, with space, dot or hyphen separators.
+
+Use **Pattern tests** before saving — the samples are stored with the protection. These ten should
+all match:
+
+```
+Call me on 07911 123456          Office line 020 7946 0958
+Mobile: 07911123456              +44 20 7946 0958 ext 12
+Reach me at +44 7911 123456      Manchester office: 0161 496 0000
++447911123456 is my cell         tel: +44 (0)7911 123456
+Direct dial 0131-496-0123        0800 001 0000 for support
+```
+
+And these ten should not — near-misses are what separate a useful protection from a noisy one:
+
+```
+The meeting is on 2026-09-18     We shipped 45 tickets
+Invoice total 1234.56            Room 401, Building 3
+Sprint 4 planning at 10:30       Budget is 25000 GBP
+Version 2.1.4 shipped            Ref ABC-123-XY
+sarah@design.co.uk               Q3 2026 roadmap
+```
+
+Then set **Apply to** your `modal` endpoint and **Action** to `Redact`.
+
+The prompt in `script.py` already carries a number for it to catch:
+
+```python
+result = agent.run_sync(
+    'Write a professional email declining a meeting invitation for a sprint planning '
+    'with the design team. Sign off with my direct line, 07700 900123.'
+)
+```
+
+`07700 900123` is inside the range Ofcom reserves for drama and documentation, so it is never a
+real subscriber — use that range in anything you publish.
+
+With the protection redacting, the sign-off comes back as the placeholder:
+
+```
+Best,
+
+[Your Name]
+[REDACTED]
+```
+
+#### Prove the model never saw it
+
+An output that simply omits the value proves nothing — a terse rule can drop a line for unrelated
+reasons, which is exactly what fooled us the first time round. Ask the model to echo the string
+back character for character:
+
+```python
+result = agent.run_sync(
+    'Repeat the following back to me character for character, with no other words: '
+    'my direct line is 07700 900123'
+)
+```
+
+Working redaction returns the placeholder, not the digits:
+
+```
+MODEL RETURNED: 'my direct line is [REDACTED]'
+```
+
+That is the difference between a guardrail and a prompt instruction: the model is not asked to
+behave, it is never given the data.
+
+> **Watch the direction.** A redaction protection cleans the **request**. If you want to stop the
+> model *emitting* data in its reply, that is the response side — `Flag response` is a separate
+> action for a reason.
+
 ### What to submit
 
 Show your work with evidence, not description:
@@ -275,6 +411,8 @@ Show your work with evidence, not description:
 3. **Logfire trace links** — one baseline, one optimized
 4. **Numbers, if your change is the kind that has numbers** — median output tokens, latency or
    cost from Logfire
+5. **The guardrail, if you went for the bonus** — the protection and its action, an echo test
+   showing the model got the placeholder, and a trace of it firing
 
 ### How entries are judged
 
@@ -283,6 +421,8 @@ Show your work with evidence, not description:
 2. **Is it worth doing?** A rule that solves a real problem beats one that only shows off.
 3. **Is it yours?** A custom rule written for your own use case beats installing something
    off-the-shelf unchanged.
+4. **Bonus — does the guardrail actually fire?** A trace showing a redaction or a block, not an
+   `Observe` entry.
 
 The caveman rule is the warm-up, not an entry. It proves the mechanism; the prize goes to what you
 do with it.
@@ -334,6 +474,7 @@ it (producing a warning) and pydantic-ai's validates it (producing the error).
 | `UnexpectedModelBehavior: 1 validation error` | The `metadata` widening is missing. |
 | `UserError: Unknown upstream provider` | First argument to `gateway_provider` must be an API flavor, not a provider name. |
 | `Route not found` | The `route=` name does not exist in your gateway. The error lists the valid ones. |
+| Protection matches in the trace but the value still reaches the model | The action is `Observe`. Set it to `Redact` or `Block`. |
 | Trace shows `[Scrubbed due to 'session']` instead of the output | Logfire's default scrubbing redacts values containing words like *session*, *token* or *secret*, and a model reply about a *sprint planning session* trips it. The output is still in the `chat` span; pass a `scrubbing` callback to `logfire.configure()` if you need it verbatim in your own log. |
 
 ### Scale to zero
