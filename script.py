@@ -23,7 +23,7 @@ agent = Agent(model)
 
 result = agent.run_sync(
     'Write a professional email declining a meeting invitation for a sprint planning '
-    'with the design team.'
+    'with the design team. Sign off with my direct line, 07700 900123.'
 )
 
 logfire.info('agent output: {output}', output=result.output)
