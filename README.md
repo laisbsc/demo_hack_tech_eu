@@ -97,8 +97,6 @@ Name it `modal` to match this demo. The name you choose is what goes in `route=`
 if you call it something else, change `route=` to match — a mismatch returns a 404 that lists the
 valid names.
 
-<!-- TODO: screenshot of the provider form, filled in -->
-
 The base URL field is prefilled with `https://api.modal.com/v1`. **Replace it.** That host is
 Modal's gRPC control plane, not an inference API — leaving it produces an empty response body
 that surfaces as a confusing parse error.
@@ -179,13 +177,9 @@ That turns on the **Optimizations** and **Guardrails** tabs under **Gateway**.
 Go to **Gateway → Optimizations → New optimization**. Write a custom rule, or pick from the 36
 existing ones and the recommended sets.
 
-<!-- TODO: screenshot of the Optimizations tab -->
-
 Installing is two steps. Step 1 is the rule; **step 2 is "Choose endpoints"**, where you tick which
 endpoints it installs on. Tick `modal` — the name you gave the provider in step 5. You must select
 at least one.
-
-<!-- TODO: screenshot of the Choose endpoints step -->
 
 All 36 rules can be installed on a Modal endpoint. The provider tags on some cards (`anthropic`,
 `openai`, `google-vertex`) say which model a rule was tuned for, not where you can install it. A
@@ -209,8 +203,9 @@ Eleven prebuilt protections ship enabled, covering common credentials:
 | Google API keys | Stripe live keys |
 | JSON Web Tokens | |
 
-**They all default to `Observe` on all requests** — they detect and record, but change nothing.
-That matters for the bonus: an untouched protection produces a trace entry, not a redaction.
+**The action is a decision you make when you set the protection up** — it is not a default you can
+leave alone. `Observe` detects and records but changes nothing, so for the bonus it produces a
+trace entry rather than a redaction. Pick deliberately.
 
 **New protection** starts from one of three:
 
@@ -223,8 +218,6 @@ A custom pattern takes a name, an optional description, and the regex, with live
 validation. **Pattern tests** let you run sample messages against the pattern before saving, and
 the samples are stored with the protection — worth using, since a regex that misses is
 indistinguishable from a guardrail that never fired.
-
-<!-- TODO: screenshot of the New protection form -->
 
 Then choose where it applies and what it does:
 
@@ -474,7 +467,7 @@ it (producing a warning) and pydantic-ai's validates it (producing the error).
 | `UnexpectedModelBehavior: 1 validation error` | The `metadata` widening is missing. |
 | `UserError: Unknown upstream provider` | First argument to `gateway_provider` must be an API flavor, not a provider name. |
 | `Route not found` | The `route=` name does not exist in your gateway. The error lists the valid ones. |
-| Protection matches in the trace but the value still reaches the model | The action is `Observe`. Set it to `Redact` or `Block`. |
+| Protection matches in the trace but the value still reaches the model | The action is set to `Observe` or `Flag response`, which record without changing the request. Switch it to `Redact` or `Block`. |
 | Trace shows `[Scrubbed due to 'session']` instead of the output | Logfire's default scrubbing redacts values containing words like *session*, *token* or *secret*, and a model reply about a *sprint planning session* trips it. The output is still in the `chat` span; pass a `scrubbing` callback to `logfire.configure()` if you need it verbatim in your own log. |
 
 ### Scale to zero
